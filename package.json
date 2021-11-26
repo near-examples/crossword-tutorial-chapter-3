@@ -1,0 +1,52 @@
+{
+  "name": "near-crossword",
+  "version": "0.1.0",
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.11.4",
+    "@testing-library/react": "^11.1.0",
+    "@testing-library/user-event": "^12.1.10",
+    "env-cmd": "^10.1.0",
+    "framer-motion": "^5.2.1",
+    "near-api-js": "^0.42.0",
+    "near-cli": "^2.1.1",
+    "near-seed-phrase": "github:near/near-seed-phrase",
+    "react": "^16.13.1",
+    "react-crossword": "mikedotexe/react-crossword#with-dist",
+    "react-dom": "^16.13.1",
+    "react-fullpage-custom-loader": "^0.1.6",
+    "react-scripts": "4.0.3",
+    "styled-components": "^5.3.3",
+    "web-vitals": "^1.0.1"
+  },
+  "scripts": {
+    "start": "parcel src/index.html",
+    "build:contract": "cd contract && cargo build --target wasm32-unknown-unknown --release",
+    "build:web": "parcel build ./src/index.html --public-url ./ --no-minify",
+    "dev": "npm run dev-deploy && env-cmd -f ./neardev/dev-account.env && npm start",
+    "dev-deploy": "near dev-deploy contract/res/crossword.wasm",
+    "postdev-deploy": "env-cmd -f ./neardev/dev-account.env node new-puzzle.js",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.5"
+  }
+}
