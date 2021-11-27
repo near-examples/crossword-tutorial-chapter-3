@@ -12,7 +12,8 @@ use near_sdk::{env, near_bindgen, PublicKey, AccountId};
 const GAS_FOR_ACCOUNT_CREATION: Gas = Gas(150_000_000_000_000);
 const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas(110_000_000_000_000);
 
-/// Used to call the linkdrop contract deployed to the top-level account (like "testnet")
+/// Used to call the linkdrop contract deployed to the top-level account
+///   (like "testnet")
 #[ext_contract(ext_linkdrop)]
 pub trait ExtLinkDropCrossContract {
     fn create_account(
@@ -22,8 +23,10 @@ pub trait ExtLinkDropCrossContract {
     ) -> Promise;
 }
 
-/// Used as a callback in this smart contract to see how the "create_account" went
-/// Returns true if the account was created successfully
+/// Define the callbacks in this smart contract:
+///   1. See how the Transfer Action went when the user has an account
+///   2. See how the "create_account" went when the user wishes to create an account
+///      (Returns true if the account was created successfully)
 #[ext_contract(ext_self)]
 pub trait AfterClaim {
     fn callback_after_transfer(
@@ -42,7 +45,8 @@ pub trait AfterClaim {
     ) -> bool;
 }
 
-/// Unfortunately, you have to double this trait, once for the cross-contract call, and once so Rust knows about it and we can implement this callback.
+/// Unfortunately, you have to double this trait, once for the cross-contract call,
+///   and once so Rust knows about it and we can implement this callback.
 pub trait AfterClaim {
     fn callback_after_transfer(
         &mut self,
@@ -238,7 +242,7 @@ impl Crossword {
         memo: String,
     ) -> Promise {
         let signer_pk = env::signer_account_pk();
-        // Check to see if the signer's public key is in the puzzle's keys
+        // Check to see if the crossword_pk is in the puzzle's keys
         let puzzle = self
             .puzzles
             .get(&crossword_pk)
