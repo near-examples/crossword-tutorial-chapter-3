@@ -179,7 +179,7 @@ impl Crossword {
             String::from(&solver_pk)
         );
 
-        // Add new function call access key for claim_reward
+        // Add new function call access key able to call claim_reward and claim_reward_new_account
         Promise::new(env::current_account_id()).add_access_key(
             solver_pk.into(),
             250000000000000000000000,
