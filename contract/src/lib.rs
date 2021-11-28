@@ -202,10 +202,24 @@ impl Crossword {
         new_pk: PublicKey,
         memo: String,
     ) -> Promise {
+        let signer_pk = env::signer_account_pk();
         let puzzle = self
             .puzzles
             .get(&crossword_pk)
-            .expect("Not a correct public key to solve puzzle");
+            .expect("That puzzle doesn't exist");
+
+        // Check that puzzle is solved and the signer has the right public key
+        match puzzle.status {
+            PuzzleStatus::Solved {
+                solver_pk: puzzle_pk,
+            } => {
+                // Check to see if signer_pk matches
+                assert_eq!(signer_pk, puzzle_pk, "You're not the person who can claim this, or else you need to use your function-call access key, friend.");
+            }
+            _ => {
+                env::panic_str("puzzle should have `Solved` status to be claimed");
+            }
+        };
 
         // Ensure there's enough balance to pay this out
         let reward_amount = puzzle.reward;
@@ -246,9 +260,9 @@ impl Crossword {
         let puzzle = self
             .puzzles
             .get(&crossword_pk)
-            .expect("Not a correct public key to solve puzzle");
+            .expect("That puzzle doesn't exist");
 
-        /* check if puzzle is already solved and set `Claimed` status */
+        // Check that puzzle is solved and the signer has the right public key
         match puzzle.status {
             PuzzleStatus::Solved {
                 solver_pk: puzzle_pk,
