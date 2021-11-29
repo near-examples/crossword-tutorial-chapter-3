@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::{Gas, serde_json};
 use near_sdk::{
@@ -8,6 +9,8 @@ use near_sdk::{
 };
 use near_sdk::{env, near_bindgen, PublicKey, AccountId};
 
+// 5 Ⓝ in yoctoNEAR
+const PRIZE_AMOUNT: u128 = 5_000_000_000_000_000_000_000_000;
 // TODO: tune these
 const GAS_FOR_ACCOUNT_CREATION: Gas = Gas(150_000_000_000_000);
 const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas(110_000_000_000_000);
@@ -135,6 +138,7 @@ pub struct Puzzle {
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Crossword {
+    owner_id: AccountId,
     puzzles: LookupMap<PublicKey, Puzzle>,
     unsolved_puzzles: UnorderedSet<PublicKey>,
     /// When a user solves the puzzle and goes to claim the reward, they might need to create an account. This is the account that likely contains the "linkdrop" smart contract. https://github.com/near/near-linkdrop
@@ -145,8 +149,9 @@ pub struct Crossword {
 #[near_bindgen]
 impl Crossword {
     #[init]
-    pub fn new(creator_account: AccountId) -> Self {
+    pub fn new(owner_id: AccountId, creator_account: AccountId) -> Self {
         Self {
+            owner_id,
             puzzles: LookupMap::new(b"c"),
             unsolved_puzzles: UnorderedSet::new(b"u"),
             creator_account,
@@ -283,7 +288,7 @@ impl Crossword {
         );
 
         Promise::new(receiver_acc_id.parse().unwrap())
-            .transfer(puzzle.reward)
+            .transfer(reward_amount)
             .then(ext_self::callback_after_transfer(
                 crossword_pk,
                 receiver_acc_id,
@@ -297,25 +302,28 @@ impl Crossword {
 
     /// Puzzle creator provides:
     /// `answer_pk` - a public key generated from crossword answer (seed phrase)
-    /// `dimensions` - the shape of the puzzle, lengthwise (`x`) and high (`y`)
+    /// `dimensions` - the shape of the puzzle, lengthwise (`x`) and high (`y`) (Soon to be deprecated)
     /// `answers` - the answers for this puzzle
     /// Call with NEAR CLI like so:
     /// `near call $NEAR_ACCT new_puzzle '{"answer_pk": "ed25519:psA2GvARwAbsAZXPs6c6mLLZppK1j1YcspGY2gqq72a", "dimensions": {"x": 19, "y": 13}, "answers": [{"num": 1, "start": {"x": 19, "y": 31}, "direction": "Across", "length": 8}]}' --accountId $NEAR_ACCT`
-    #[payable]
     pub fn new_puzzle(
         &mut self,
         answer_pk: PublicKey,
         dimensions: CoordinatePair,
         answers: Vec<Answer>,
     ) {
-        let value_transferred = env::attached_deposit();
+        assert_eq!(
+            env::predecessor_account_id(),
+            self.owner_id,
+            "Only the owner may call this method"
+        );
         let creator = env::predecessor_account_id();
         let answer_pk = PublicKey::from(answer_pk);
         let existing = self.puzzles.insert(
             &answer_pk,
             &Puzzle {
                 status: PuzzleStatus::Unsolved,
-                reward: value_transferred,
+                reward: PRIZE_AMOUNT,
                 creator,
                 dimensions,
                 answer: answers,
@@ -461,13 +469,7 @@ impl AfterClaim for Crossword {
 }
 
 fn get_decoded_pk(pk: PublicKey) -> String {
-    serde_json::to_string(&pk).unwrap()
-    // let key_type = pk[0];
-    // match key_type {
-    //     0 => ["ed25519:", &bs58::encode(&pk[1..]).into_string()].concat(),
-    //     1 => ["secp256k1:", &bs58::encode(&pk[1..]).into_string()].concat(),
-    //     _ => env::panic(b"ERR_UNKNOWN_KEY_TYPE"),
-    // }
+    String::try_from(&pk).unwrap()
 }
 
 #[cfg(test)]
