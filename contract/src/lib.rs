@@ -8,6 +8,7 @@ use near_sdk::{
     Balance, Promise, PromiseResult, PanicOnDefault
 };
 use near_sdk::{env, near_bindgen, PublicKey, AccountId};
+use near_sdk::json_types::Base64VecU8;
 
 // 5 Ⓝ in yoctoNEAR
 const PRIZE_AMOUNT: u128 = 5_000_000_000_000_000_000_000_000;
@@ -129,6 +130,15 @@ pub struct Puzzle {
     /// Use the CoordinatePair assuming the origin is (0, 0) in the top left side of the puzzle.
     dimensions: CoordinatePair,
     answer: Vec<Answer>,
+}
+
+
+#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct NewPuzzleArgs {
+    answer_pk: PublicKey,
+    dimensions: CoordinatePair,
+    answers: Vec<Answer>,
 }
 
 /// Regarding PanicOnDefault:
@@ -308,25 +318,26 @@ impl Crossword {
     /// `near call $NEAR_ACCT new_puzzle '{"answer_pk": "ed25519:psA2GvARwAbsAZXPs6c6mLLZppK1j1YcspGY2gqq72a", "dimensions": {"x": 19, "y": 13}, "answers": [{"num": 1, "start": {"x": 19, "y": 31}, "direction": "Across", "length": 8}]}' --accountId $NEAR_ACCT`
     pub fn new_puzzle(
         &mut self,
-        answer_pk: PublicKey,
-        dimensions: CoordinatePair,
-        answers: Vec<Answer>,
+        args: Base64VecU8
     ) {
         assert_eq!(
             env::predecessor_account_id(),
             self.owner_id,
             "Only the owner may call this method"
         );
+        // We'll turn the base64 vector of bytes into our argument object
+        let puzzle_args: NewPuzzleArgs = serde_json::from_slice(&args.0.as_slice()).unwrap();
+
         let creator = env::predecessor_account_id();
-        let answer_pk = PublicKey::from(answer_pk);
+        let answer_pk = PublicKey::from(puzzle_args.answer_pk);
         let existing = self.puzzles.insert(
             &answer_pk,
             &Puzzle {
                 status: PuzzleStatus::Unsolved,
                 reward: PRIZE_AMOUNT,
                 creator,
-                dimensions,
-                answer: answers,
+                dimensions: puzzle_args.dimensions,
+                answer: puzzle_args.answers,
             },
         );
 
@@ -474,29 +485,39 @@ fn get_decoded_pk(pk: PublicKey) -> String {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use near_sdk::MockedBlockchain;
-    // use near_sdk::{testing_env, VMContext};
+    use super::*;
+    use near_sdk::MockedBlockchain;
+    use near_sdk::{testing_env, VMContext};
+    use near_sdk::test_utils::get_logs;
 
-    // // mock the context for testing, notice "signer_account_id" that was accessed above from env::
-    // fn get_context(input: Vec<u8>, is_view: bool) -> VMContext {
-    //     VMContext {
-    //         current_account_id: "alice_near".to_string(),
-    //         signer_account_id: "bob_near".to_string(),
-    //         signer_account_pk: vec![0, 1, 2],
-    //         predecessor_account_id: "carol_near".to_string(),
-    //         input,
-    //         block_index: 0,
-    //         block_timestamp: 0,
-    //         account_balance: 0,
-    //         account_locked_balance: 0,
-    //         storage_usage: 0,
-    //         attached_deposit: 0,
-    //         prepaid_gas: 10u64.pow(18),
-    //         random_seed: vec![0, 1, 2],
-    //         is_view,
-    //         output_data_receivers: vec![],
-    //         epoch_height: 19,
-    //     }
-    // }
+    // mock the context for testing, notice "signer_account_id" that was accessed above from env::
+    fn get_context(input: Vec<u8>, is_view: bool) -> VMContext {
+        VMContext {
+            current_account_id: "alice_near".to_string(),
+            signer_account_id: "bob_near".to_string(),
+            signer_account_pk: vec![0, 1, 2],
+            predecessor_account_id: "carol_near".to_string(),
+            input,
+            block_index: 0,
+            block_timestamp: 0,
+            account_balance: 0,
+            account_locked_balance: 0,
+            storage_usage: 0,
+            attached_deposit: 0,
+            prepaid_gas: 10u64.pow(18),
+            random_seed: vec![0, 1, 2],
+            is_view,
+            output_data_receivers: vec![],
+            epoch_height: 19,
+        }
+    }
+
+    // Simply demonstrate how to pass in Base64VecU8 in a unit test
+    #[test]
+    fn new_puzzle_test() {
+        let mut contract = Crossword::new("bob.near".parse().unwrap(), "linkdrop".parse().unwrap());
+        // Note we have to wrap this in extra, escaped quotes for unit tests
+        let pass_it_in: Base64VecU8 = serde_json::from_str(&"\"ewogICJhbnN3ZXJfcGsiOiAiZWQyNTUxOTo3UGtLUG1WVVhjdXBBNW9VOGQ2VGJneU13ekZlOHRQVjZlVjFLR3dnbzl4ZyIsCiAgImRpbWVuc2lvbnMiOiB7CiAgICAieCI6IDExLAogICAgInkiOiAxMAogIH0sCiAgImFuc3dlcnMiOiBbCiAgICB7CiAgICAgICJudW0iOiAxLAogICAgICAic3RhcnQiOiB7CiAgICAgICAgIngiOiAwLAogICAgICAgICJ5IjogMQogICAgICB9LAogICAgICAiZGlyZWN0aW9uIjogIkFjcm9zcyIsCiAgICAgICJsZW5ndGgiOiAxMiwKICAgICAgImNsdWUiOiAiTkVBUiB0cmFuc2FjdGlvbnMgYXJlIG1vcmUgX19fX19fIGluc3RlYWQgb2YgYXRvbWljLiIKICAgIH0KICBdCn0=\"").unwrap();
+        contract.new_puzzle(pass_it_in);
+    }
 }
