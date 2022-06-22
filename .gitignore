@@ -6,3 +6,4 @@
 /dist
 neardev
 contract/target
+Cargo.lock
