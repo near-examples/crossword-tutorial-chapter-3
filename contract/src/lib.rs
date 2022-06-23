@@ -1,14 +1,14 @@
-use std::convert::TryFrom;
 use near_sdk::collections::{LookupMap, UnorderedSet};
-use near_sdk::{Gas, serde_json};
+use near_sdk::json_types::Base64VecU8;
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
     ext_contract, log,
     serde::{Deserialize, Serialize},
-    Balance, Promise, PromiseResult, PanicOnDefault
+    Balance, PanicOnDefault, Promise, PromiseResult,
 };
-use near_sdk::{env, near_bindgen, PublicKey, AccountId};
-use near_sdk::json_types::Base64VecU8;
+use near_sdk::{env, near_bindgen, AccountId, PublicKey};
+use near_sdk::{serde_json, Gas};
+use std::convert::TryFrom;
 
 // 5 Ⓝ in yoctoNEAR
 const PRIZE_AMOUNT: u128 = 5_000_000_000_000_000_000_000_000;
@@ -20,37 +20,13 @@ const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas(110_000_000_000_000);
 ///   (like "testnet")
 #[ext_contract(ext_linkdrop)]
 pub trait ExtLinkDropCrossContract {
-    fn create_account(
-        &mut self,
-        new_account_id: AccountId,
-        new_public_key: PublicKey,
-    ) -> Promise;
+    fn create_account(&mut self, new_account_id: AccountId, new_public_key: PublicKey) -> Promise;
 }
 
 /// Define the callbacks in this smart contract:
 ///   1. See how the Transfer Action went when the user has an account
 ///   2. See how the "create_account" went when the user wishes to create an account
-///      (Returns true if the account was created successfully)
-#[ext_contract(ext_self)]
-pub trait AfterClaim {
-    fn callback_after_transfer(
-        &mut self,
-        crossword_pk: PublicKey,
-        account_id: String,
-        memo: String,
-        signer_pk: PublicKey,
-    ) -> bool;
-    fn callback_after_create_account(
-        &mut self,
-        crossword_pk: PublicKey,
-        account_id: String,
-        memo: String,
-        signer_pk: PublicKey,
-    ) -> bool;
-}
-
-/// Unfortunately, you have to double this trait, once for the cross-contract call,
-///   and once so Rust knows about it and we can implement this callback.
+///      (Returns true if the account was created successfully
 pub trait AfterClaim {
     fn callback_after_transfer(
         &mut self,
@@ -132,7 +108,6 @@ pub struct Puzzle {
     answer: Vec<Answer>,
 }
 
-
 #[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct NewPuzzleArgs {
@@ -154,7 +129,6 @@ pub struct Crossword {
     /// When a user solves the puzzle and goes to claim the reward, they might need to create an account. This is the account that likely contains the "linkdrop" smart contract. https://github.com/near/near-linkdrop
     creator_account: AccountId,
 }
-
 
 #[near_bindgen]
 impl Crossword {
@@ -243,25 +217,21 @@ impl Crossword {
             "The smart contract does not have enough balance to pay this out. :/"
         );
 
-        ext_linkdrop::create_account(
-            new_acc_id.parse().unwrap(),
-            new_pk,
-            AccountId::from(self.creator_account.clone()),
-            reward_amount,
-            GAS_FOR_ACCOUNT_CREATION,
-        )
-        .then(
-            // Chain a promise callback to ourselves
-            ext_self::callback_after_create_account(
-                crossword_pk,
-                new_acc_id,
-                memo,
-                env::signer_account_pk(),
-                env::current_account_id(),
-                0,
-                GAS_FOR_ACCOUNT_CALLBACK,
-            ),
-        )
+        ext_linkdrop::ext(AccountId::from(self.creator_account.clone()))
+            .with_attached_deposit(reward_amount)
+            .with_static_gas(GAS_FOR_ACCOUNT_CREATION) // This amount of gas will be split
+            .create_account(new_acc_id.parse().unwrap(), new_pk)
+            .then(
+                // Chain a promise callback to ourselves
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_ACCOUNT_CALLBACK)
+                    .callback_after_create_account(
+                        crossword_pk,
+                        new_acc_id,
+                        memo,
+                        env::signer_account_pk(),
+                    ),
+            )
     }
 
     pub fn claim_reward(
@@ -299,15 +269,16 @@ impl Crossword {
 
         Promise::new(receiver_acc_id.parse().unwrap())
             .transfer(reward_amount)
-            .then(ext_self::callback_after_transfer(
-                crossword_pk,
-                receiver_acc_id,
-                memo,
-                env::signer_account_pk(),
-                env::current_account_id(),
-                0,
-                GAS_FOR_ACCOUNT_CALLBACK,
-            ))
+            .then(
+                Self::ext(env::current_account_id())
+                    .with_static_gas(GAS_FOR_ACCOUNT_CALLBACK)
+                    .callback_after_transfer(
+                        crossword_pk,
+                        receiver_acc_id,
+                        memo,
+                        env::signer_account_pk(),
+                    ),
+            )
     }
 
     /// Puzzle creator provides:
@@ -316,10 +287,7 @@ impl Crossword {
     /// `answers` - the answers for this puzzle
     /// Call with NEAR CLI like so:
     /// `near call $NEAR_ACCT new_puzzle '{"answer_pk": "ed25519:psA2GvARwAbsAZXPs6c6mLLZppK1j1YcspGY2gqq72a", "dimensions": {"x": 19, "y": 13}, "answers": [{"num": 1, "start": {"x": 19, "y": 31}, "direction": "Across", "length": 8}]}' --accountId $NEAR_ACCT`
-    pub fn new_puzzle(
-        &mut self,
-        args: Base64VecU8
-    ) {
+    pub fn new_puzzle(&mut self, args: Base64VecU8) {
         assert_eq!(
             env::predecessor_account_id(),
             self.owner_id,
@@ -481,43 +449,4 @@ impl AfterClaim for Crossword {
 
 fn get_decoded_pk(pk: PublicKey) -> String {
     String::try_from(&pk).unwrap()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use near_sdk::MockedBlockchain;
-    use near_sdk::{testing_env, VMContext};
-    use near_sdk::test_utils::get_logs;
-
-    // mock the context for testing, notice "signer_account_id" that was accessed above from env::
-    fn get_context(input: Vec<u8>, is_view: bool) -> VMContext {
-        VMContext {
-            current_account_id: "alice_near".to_string(),
-            signer_account_id: "bob_near".to_string(),
-            signer_account_pk: vec![0, 1, 2],
-            predecessor_account_id: "carol_near".to_string(),
-            input,
-            block_index: 0,
-            block_timestamp: 0,
-            account_balance: 0,
-            account_locked_balance: 0,
-            storage_usage: 0,
-            attached_deposit: 0,
-            prepaid_gas: 10u64.pow(18),
-            random_seed: vec![0, 1, 2],
-            is_view,
-            output_data_receivers: vec![],
-            epoch_height: 19,
-        }
-    }
-
-    // Simply demonstrate how to pass in Base64VecU8 in a unit test
-    #[test]
-    fn new_puzzle_test() {
-        let mut contract = Crossword::new("bob.near".parse().unwrap(), "linkdrop".parse().unwrap());
-        // Note we have to wrap this in extra, escaped quotes for unit tests
-        let pass_it_in: Base64VecU8 = serde_json::from_str(&"\"ewogICJhbnN3ZXJfcGsiOiAiZWQyNTUxOTo3UGtLUG1WVVhjdXBBNW9VOGQ2VGJneU13ekZlOHRQVjZlVjFLR3dnbzl4ZyIsCiAgImRpbWVuc2lvbnMiOiB7CiAgICAieCI6IDExLAogICAgInkiOiAxMAogIH0sCiAgImFuc3dlcnMiOiBbCiAgICB7CiAgICAgICJudW0iOiAxLAogICAgICAic3RhcnQiOiB7CiAgICAgICAgIngiOiAwLAogICAgICAgICJ5IjogMQogICAgICB9LAogICAgICAiZGlyZWN0aW9uIjogIkFjcm9zcyIsCiAgICAgICJsZW5ndGgiOiAxMiwKICAgICAgImNsdWUiOiAiTkVBUiB0cmFuc2FjdGlvbnMgYXJlIG1vcmUgX19fX19fIGluc3RlYWQgb2YgYXRvbWljLiIKICAgIH0KICBdCn0=\"").unwrap();
-        contract.new_puzzle(pass_it_in);
-    }
 }
