@@ -171,7 +171,7 @@ On Windows, if you're seeing an error containing `EPERM` it may be related to sp
   [React]: https://reactjs.org
   [Node.js]: https://nodejs.org/en/download/package-manager
   [jest]: https://jestjs.io
-  [NEAR accounts]: https://docs.near.org/docs/concepts/account
+  [NEAR accounts]: https://docs.near.org/concepts/basics/account
   [NEAR Wallet]: https://wallet.testnet.near.org
-  [near-cli]: https://docs.near.org/docs/tools/near-cli
+  [near-cli]: https://docs.near.org/tools/near-cli
   [gh-pages]: https://github.com/tschaub/gh-pages
