@@ -100,9 +100,9 @@ pub struct Puzzle {
     answer: Vec<Answer>,
 }
 
-#[near(serializers = [borsh, json])]
+#[near(serializers = [json])]
 pub struct NewPuzzleArgs {
-    answer_pk: String,
+    answer_pk: PublicKey,
     dimensions: CoordinatePair,
     answers: Vec<Answer>,
 }
@@ -115,7 +115,7 @@ pub struct NewPuzzleArgs {
 #[derive(PanicOnDefault)]
 pub struct Crossword {
     owner_id: AccountId,
-    puzzles: LookupMap<String, Puzzle>,
+    puzzles: LookupMap<PublicKey, Puzzle>,
     unsolved_puzzles: UnorderedSet<String>,
     /// When a user solves the puzzle and goes to claim the reward, they might need to create an account. This is the account that likely contains the "linkdrop" smart contract. https://github.com/near/near-linkdrop
     creator_account: AccountId,
@@ -138,7 +138,7 @@ impl Crossword {
         // check to see if the answer_pk from signer is in the puzzles
         let mut puzzle = self
             .puzzles
-            .get(&String::from(&answer_pk))
+            .get(&answer_pk)
             .expect("ERR_NOT_CORRECT_ANSWER");
 
         // Check if the puzzle is already solved. If it's unsolved, make batch action of
@@ -153,7 +153,7 @@ impl Crossword {
         };
 
         // Reinsert the puzzle back in after we modified the status:
-        self.puzzles.insert(&String::from(&answer_pk), &puzzle);
+        self.puzzles.insert(&answer_pk, &puzzle);
         // Remove from the list of unsolved ones
         self.unsolved_puzzles.remove(&String::from(&answer_pk));
 
@@ -185,7 +185,7 @@ impl Crossword {
         let signer_pk = env::signer_account_pk();
         let puzzle = self
             .puzzles
-            .get(&String::from(&crossword_pk))
+            .get(&crossword_pk)
             .expect("That puzzle doesn't exist");
 
         // Check that puzzle is solved and the signer has the right public key
@@ -235,7 +235,7 @@ impl Crossword {
         // Check to see if the crossword_pk is in the puzzle's keys
         let puzzle = self
             .puzzles
-            .get(&String::from(&crossword_pk))
+            .get(&crossword_pk)
             .expect("That puzzle doesn't exist");
 
         // Check that puzzle is solved and the signer has the right public key
@@ -288,9 +288,9 @@ impl Crossword {
         let puzzle_args: NewPuzzleArgs = serde_json::from_slice(&args.0.as_slice()).unwrap();
 
         let creator = env::predecessor_account_id();
-        let answer_pk = PublicKey::from_str(puzzle_args.answer_pk.as_str()).unwrap();
+        let answer_pk = PublicKey::from(puzzle_args.answer_pk);
         let existing = self.puzzles.insert(
-            &puzzle_args.answer_pk,
+            &answer_pk,
             &Puzzle {
                 status: PuzzleStatus::Unsolved,
                 reward: NearToken::from_yoctonear(PRIZE_AMOUNT),
@@ -301,7 +301,7 @@ impl Crossword {
         );
 
         assert!(existing.is_none(), "Puzzle with that key already exists");
-        self.unsolved_puzzles.insert(&puzzle_args.answer_pk);
+        self.unsolved_puzzles.insert(&String::from(&answer_pk));
 
         Promise::new(env::current_account_id()).add_access_key_allowance(
             answer_pk,
@@ -317,7 +317,7 @@ impl Crossword {
         for pk in public_keys {
             let puzzle = self
                 .puzzles
-                .get(&pk)
+                .get(& PublicKey::from_str(pk.as_str()).unwrap())
                 .unwrap_or_else(|| env::panic_str("ERR_LOADING_PUZZLE"));
             let json_puzzle = JsonPuzzle {
                 solution_public_key: get_decoded_pk(PublicKey::from_str(pk.as_str()).unwrap()),
@@ -349,12 +349,12 @@ impl Crossword {
     ) {
         let mut puzzle = self
             .puzzles
-            .get(&String::from(&crossword_pk))
+            .get(&crossword_pk)
             .expect("Error loading puzzle when finalizing.");
 
         puzzle.status = PuzzleStatus::Claimed { memo: memo.clone() };
         // Reinsert the puzzle back in after we modified the status
-        self.puzzles.insert(&String::from(&crossword_pk), &puzzle);
+        self.puzzles.insert(&crossword_pk, &puzzle);
 
         log!(
             "Puzzle with pk: {:?} claimed, new account created: {}, memo: {}, reward claimed: {}",
