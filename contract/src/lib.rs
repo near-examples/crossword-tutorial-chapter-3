@@ -1,20 +1,18 @@
 use near_sdk::collections::{LookupMap, UnorderedSet};
 use near_sdk::json_types::Base64VecU8;
 use near_sdk::{
-    borsh::{self, BorshDeserialize, BorshSerialize},
-    ext_contract, log,
-    serde::{Deserialize, Serialize},
-    Balance, PanicOnDefault, Promise, PromiseResult,
+    ext_contract, log, Allowance, NearToken, PanicOnDefault, Promise, PromiseResult
 };
-use near_sdk::{env, near_bindgen, AccountId, PublicKey};
+use near_sdk::{env, near, AccountId, PublicKey};
 use near_sdk::{serde_json, Gas};
 use std::convert::TryFrom;
+use std::str::FromStr;
 
 // 5 Ⓝ in yoctoNEAR
 const PRIZE_AMOUNT: u128 = 5_000_000_000_000_000_000_000_000;
 // TODO: tune these
-const GAS_FOR_ACCOUNT_CREATION: Gas = Gas(150_000_000_000_000);
-const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas(110_000_000_000_000);
+const GAS_FOR_ACCOUNT_CREATION: Gas = Gas::from_gas(150_000_000_000_000);
+const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas::from_gas(110_000_000_000_000);
 
 /// Used to call the linkdrop contract deployed to the top-level account
 ///   (like "testnet")
@@ -44,16 +42,18 @@ pub trait AfterClaim {
     ) -> bool;
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub enum AnswerDirection {
     Across,
     Down,
 }
 
 /// The origin (0,0) starts at the top left side of the square
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub struct CoordinatePair {
     x: u8,
     y: u8,
@@ -61,8 +61,9 @@ pub struct CoordinatePair {
 
 // {"num": 1, "start": {"x": 19, "y": 31}, "direction": "Across", "length": 8, "clue": "not far but"}
 // We'll have the clue stored on-chain for now for simplicity.
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub struct Answer {
     num: u8,
     start: CoordinatePair,
@@ -71,47 +72,52 @@ pub struct Answer {
     clue: String,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub enum PuzzleStatus {
     Unsolved,
-    Solved { solver_pk: PublicKey },
+    Solved { solver_pk: String },
     Claimed { memo: String },
 }
 
-#[derive(Serialize)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(Serialize)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub struct UnsolvedPuzzles {
     puzzles: Vec<JsonPuzzle>,
     creator_account: AccountId,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(Serialize, Deserialize)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub struct JsonPuzzle {
     /// The human-readable public key that's the solution from the seed phrase
     solution_public_key: String,
     status: PuzzleStatus,
-    reward: Balance,
+    reward: NearToken,
     creator: AccountId,
     dimensions: CoordinatePair,
     answer: Vec<Answer>,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Debug)]
+//#[derive(BorshDeserialize, BorshSerialize, Debug)]
+#[near(serializers = [borsh])]
 pub struct Puzzle {
     status: PuzzleStatus,
-    reward: Balance,
+    reward: NearToken,
     creator: AccountId,
     /// Use the CoordinatePair assuming the origin is (0, 0) in the top left side of the puzzle.
     dimensions: CoordinatePair,
     answer: Vec<Answer>,
 }
 
-#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
-#[serde(crate = "near_sdk::serde")]
+//#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
+//#[serde(crate = "near_sdk::serde")]
+#[near(serializers = [borsh, json])]
 pub struct NewPuzzleArgs {
-    answer_pk: PublicKey,
+    answer_pk: String,
     dimensions: CoordinatePair,
     answers: Vec<Answer>,
 }
@@ -120,17 +126,19 @@ pub struct NewPuzzleArgs {
 /// When you want to have a "new" function initialize a smart contract,
 /// you'll likely want to follow this pattern of having a default implementation that panics,
 /// directing the user to call the initialization method. (The one with the #[init] macro)
-#[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+//#[near_bindgen]
+//#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
+#[near(contract_state)]
+#[derive(PanicOnDefault)]
 pub struct Crossword {
     owner_id: AccountId,
-    puzzles: LookupMap<PublicKey, Puzzle>,
-    unsolved_puzzles: UnorderedSet<PublicKey>,
+    puzzles: LookupMap<String, Puzzle>,
+    unsolved_puzzles: UnorderedSet<String>,
     /// When a user solves the puzzle and goes to claim the reward, they might need to create an account. This is the account that likely contains the "linkdrop" smart contract. https://github.com/near/near-linkdrop
     creator_account: AccountId,
 }
 
-#[near_bindgen]
+#[near]
 impl Crossword {
     #[init]
     pub fn new(owner_id: AccountId, creator_account: AccountId) -> Self {
@@ -147,14 +155,14 @@ impl Crossword {
         // check to see if the answer_pk from signer is in the puzzles
         let mut puzzle = self
             .puzzles
-            .get(&answer_pk)
+            .get(&String::from(&answer_pk))
             .expect("ERR_NOT_CORRECT_ANSWER");
 
         // Check if the puzzle is already solved. If it's unsolved, make batch action of
         // removing that public key and adding the user's public key
         puzzle.status = match puzzle.status {
             PuzzleStatus::Unsolved => PuzzleStatus::Solved {
-                solver_pk: solver_pk.clone().into(),
+                solver_pk: String::from(&solver_pk),
             },
             _ => {
                 env::panic_str("ERR_PUZZLE_SOLVED");
@@ -162,9 +170,9 @@ impl Crossword {
         };
 
         // Reinsert the puzzle back in after we modified the status:
-        self.puzzles.insert(&answer_pk, &puzzle);
+        self.puzzles.insert(&String::from(&answer_pk), &puzzle);
         // Remove from the list of unsolved ones
-        self.unsolved_puzzles.remove(&answer_pk);
+        self.unsolved_puzzles.remove(&String::from(&answer_pk));
 
         log!(
             "Puzzle with pk {:?} solved, solver pk: {}",
@@ -173,9 +181,9 @@ impl Crossword {
         );
 
         // Add new function call access key able to call claim_reward and claim_reward_new_account
-        Promise::new(env::current_account_id()).add_access_key(
+        Promise::new(env::current_account_id()).add_access_key_allowance(
             solver_pk.into(),
-            250000000000000000000000,
+            Allowance::limited(NearToken::from_yoctonear(250000000000000000000000)).unwrap(),
             env::current_account_id(),
             "claim_reward,claim_reward_new_account".to_string(),
         );
@@ -194,7 +202,7 @@ impl Crossword {
         let signer_pk = env::signer_account_pk();
         let puzzle = self
             .puzzles
-            .get(&crossword_pk)
+            .get(&String::from(&crossword_pk))
             .expect("That puzzle doesn't exist");
 
         // Check that puzzle is solved and the signer has the right public key
@@ -203,7 +211,7 @@ impl Crossword {
                 solver_pk: puzzle_pk,
             } => {
                 // Check to see if signer_pk matches
-                assert_eq!(signer_pk, puzzle_pk, "You're not the person who can claim this, or else you need to use your function-call access key, friend.");
+                assert_eq!(String::from(&signer_pk), puzzle_pk, "You're not the person who can claim this, or else you need to use your function-call access key, friend.");
             }
             _ => {
                 env::panic_str("puzzle should have `Solved` status to be claimed");
@@ -244,7 +252,7 @@ impl Crossword {
         // Check to see if the crossword_pk is in the puzzle's keys
         let puzzle = self
             .puzzles
-            .get(&crossword_pk)
+            .get(&String::from(&crossword_pk))
             .expect("That puzzle doesn't exist");
 
         // Check that puzzle is solved and the signer has the right public key
@@ -253,7 +261,7 @@ impl Crossword {
                 solver_pk: puzzle_pk,
             } => {
                 // Check to see if signer_pk matches
-                assert_eq!(signer_pk, puzzle_pk, "You're not the person who can claim this, or else you need to use your function-call access key, friend.");
+                assert_eq!(String::from(&signer_pk), puzzle_pk, "You're not the person who can claim this, or else you need to use your function-call access key, friend.");
             }
             _ => {
                 env::panic_str("puzzle should have `Solved` status to be claimed");
@@ -297,12 +305,12 @@ impl Crossword {
         let puzzle_args: NewPuzzleArgs = serde_json::from_slice(&args.0.as_slice()).unwrap();
 
         let creator = env::predecessor_account_id();
-        let answer_pk = PublicKey::from(puzzle_args.answer_pk);
+        let answer_pk = PublicKey::from_str(puzzle_args.answer_pk.as_str()).unwrap();
         let existing = self.puzzles.insert(
-            &answer_pk,
+            &puzzle_args.answer_pk,
             &Puzzle {
                 status: PuzzleStatus::Unsolved,
-                reward: PRIZE_AMOUNT,
+                reward: NearToken::from_yoctonear(PRIZE_AMOUNT),
                 creator,
                 dimensions: puzzle_args.dimensions,
                 answer: puzzle_args.answers,
@@ -310,11 +318,11 @@ impl Crossword {
         );
 
         assert!(existing.is_none(), "Puzzle with that key already exists");
-        self.unsolved_puzzles.insert(&answer_pk);
+        self.unsolved_puzzles.insert(&puzzle_args.answer_pk);
 
-        Promise::new(env::current_account_id()).add_access_key(
+        Promise::new(env::current_account_id()).add_access_key_allowance(
             answer_pk,
-            250000000000000000000000,
+            Allowance::limited(NearToken::from_yoctonear(250000000000000000000000)).unwrap(),
             env::current_account_id(),
             "submit_solution".to_string(),
         );
@@ -329,7 +337,7 @@ impl Crossword {
                 .get(&pk)
                 .unwrap_or_else(|| env::panic_str("ERR_LOADING_PUZZLE"));
             let json_puzzle = JsonPuzzle {
-                solution_public_key: get_decoded_pk(pk),
+                solution_public_key: get_decoded_pk(PublicKey::from_str(pk.as_str()).unwrap()),
                 status: puzzle.status,
                 reward: puzzle.reward,
                 creator: puzzle.creator,
@@ -346,7 +354,7 @@ impl Crossword {
 }
 
 /// Private functions (cannot be called from the outside by a transaction)
-#[near_bindgen]
+#[near]
 impl Crossword {
     /// Update the status of the puzzle and store the memo
     fn finalize_puzzle(
@@ -358,12 +366,12 @@ impl Crossword {
     ) {
         let mut puzzle = self
             .puzzles
-            .get(&crossword_pk)
+            .get(&String::from(&crossword_pk))
             .expect("Error loading puzzle when finalizing.");
 
         puzzle.status = PuzzleStatus::Claimed { memo: memo.clone() };
         // Reinsert the puzzle back in after we modified the status
-        self.puzzles.insert(&crossword_pk, &puzzle);
+        self.puzzles.insert(&String::from(&crossword_pk), &puzzle);
 
         log!(
             "Puzzle with pk: {:?} claimed, new account created: {}, memo: {}, reward claimed: {}",
@@ -378,7 +386,7 @@ impl Crossword {
     }
 }
 
-#[near_bindgen]
+#[near]
 impl AfterClaim for Crossword {
     #[private]
     fn callback_after_transfer(
@@ -394,9 +402,6 @@ impl AfterClaim for Crossword {
             "Expected 1 promise result."
         );
         match env::promise_result(0) {
-            PromiseResult::NotReady => {
-                unreachable!()
-            }
             PromiseResult::Successful(_) => {
                 // New account created and reward transferred successfully.
                 self.finalize_puzzle(crossword_pk, account_id, memo, signer_pk);
@@ -424,9 +429,6 @@ impl AfterClaim for Crossword {
             "Expected 1 promise result."
         );
         match env::promise_result(0) {
-            PromiseResult::NotReady => {
-                unreachable!()
-            }
             PromiseResult::Successful(creation_result) => {
                 let creation_succeeded: bool = serde_json::from_slice(&creation_result)
                     .expect("Could not turn result from account creation into boolean.");
