@@ -42,8 +42,6 @@ pub trait AfterClaim {
     ) -> bool;
 }
 
-//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub enum AnswerDirection {
     Across,
@@ -51,8 +49,6 @@ pub enum AnswerDirection {
 }
 
 /// The origin (0,0) starts at the top left side of the square
-//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub struct CoordinatePair {
     x: u8,
@@ -61,8 +57,6 @@ pub struct CoordinatePair {
 
 // {"num": 1, "start": {"x": 19, "y": 31}, "direction": "Across", "length": 8, "clue": "not far but"}
 // We'll have the clue stored on-chain for now for simplicity.
-//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub struct Answer {
     num: u8,
@@ -72,8 +66,6 @@ pub struct Answer {
     clue: String,
 }
 
-//#[derive(BorshDeserialize, BorshSerialize, Deserialize, Serialize, Debug)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub enum PuzzleStatus {
     Unsolved,
@@ -81,16 +73,12 @@ pub enum PuzzleStatus {
     Claimed { memo: String },
 }
 
-//#[derive(Serialize)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub struct UnsolvedPuzzles {
     puzzles: Vec<JsonPuzzle>,
     creator_account: AccountId,
 }
 
-//#[derive(Serialize, Deserialize)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub struct JsonPuzzle {
     /// The human-readable public key that's the solution from the seed phrase
@@ -102,7 +90,6 @@ pub struct JsonPuzzle {
     answer: Vec<Answer>,
 }
 
-//#[derive(BorshDeserialize, BorshSerialize, Debug)]
 #[near(serializers = [borsh])]
 pub struct Puzzle {
     status: PuzzleStatus,
@@ -113,8 +100,6 @@ pub struct Puzzle {
     answer: Vec<Answer>,
 }
 
-//#[derive(Serialize, Deserialize, BorshDeserialize, BorshSerialize, Debug)]
-//#[serde(crate = "near_sdk::serde")]
 #[near(serializers = [borsh, json])]
 pub struct NewPuzzleArgs {
     answer_pk: String,
@@ -126,8 +111,6 @@ pub struct NewPuzzleArgs {
 /// When you want to have a "new" function initialize a smart contract,
 /// you'll likely want to follow this pattern of having a default implementation that panics,
 /// directing the user to call the initialization method. (The one with the #[init] macro)
-//#[near_bindgen]
-//#[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct Crossword {
