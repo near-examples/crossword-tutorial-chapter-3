@@ -317,7 +317,7 @@ impl Crossword {
         for pk in public_keys {
             let puzzle = self
                 .puzzles
-                .get(& PublicKey::from_str(pk.as_str()).unwrap())
+                .get(&PublicKey::from_str(pk.as_str()).unwrap())
                 .unwrap_or_else(|| env::panic_str("ERR_LOADING_PUZZLE"));
             let json_puzzle = JsonPuzzle {
                 solution_public_key: get_decoded_pk(PublicKey::from_str(pk.as_str()).unwrap()),
