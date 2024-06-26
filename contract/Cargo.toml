@@ -9,11 +9,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 near-sdk = { version = "5.1.0", features = ["legacy"] }
-bs58 = "0.4"
 
 [dev-dependencies]
 near-sdk = { version = "5.1.0", features = ["unit-testing"] }
-bs58 = "0.4"
 
 [profile.release]
 codegen-units = 1

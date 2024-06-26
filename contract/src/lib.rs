@@ -9,7 +9,7 @@ use std::convert::TryFrom;
 use std::str::FromStr;
 
 // 5 Ⓝ in yoctoNEAR
-const PRIZE_AMOUNT: u128 = 5_000_000_000_000_000_000_000_000;
+const PRIZE_AMOUNT: NearToken = NearToken::from_yoctonear(5_000_000_000_000_000_000_000_000);
 // TODO: tune these
 const GAS_FOR_ACCOUNT_CREATION: Gas = Gas::from_gas(150_000_000_000_000);
 const GAS_FOR_ACCOUNT_CALLBACK: Gas = Gas::from_gas(110_000_000_000_000);
@@ -90,7 +90,7 @@ pub struct JsonPuzzle {
     answer: Vec<Answer>,
 }
 
-#[near(serializers = [borsh])]
+#[near]
 pub struct Puzzle {
     status: PuzzleStatus,
     reward: NearToken,
@@ -293,7 +293,7 @@ impl Crossword {
             &answer_pk,
             &Puzzle {
                 status: PuzzleStatus::Unsolved,
-                reward: NearToken::from_yoctonear(PRIZE_AMOUNT),
+                reward: PRIZE_AMOUNT,
                 creator,
                 dimensions: puzzle_args.dimensions,
                 answer: puzzle_args.answers,
